@@ -72,8 +72,11 @@ else
   sudo dnf -y install firewalld dnf-automatic >/dev/null 2>&1 || sudo dnf -y install firewalld dnf5-plugin-automatic >/dev/null 2>&1
   sudo systemctl enable --now firewalld >/dev/null 2>&1
   # Fedora Workstation's default zone opens ports 1025-65535; "public" only allows ssh/dhcpv6-client
-  sudo firewall-cmd --set-default-zone=public >/dev/null 2>&1
-  [ $SSH_ON = 0 ] && sudo firewall-cmd --permanent --zone=public --remove-service=ssh >/dev/null 2>&1
+  ZONE=$(sudo firewall-cmd --get-default-zone 2>/dev/null)
+  if [ "$ZONE" = "FedoraWorkstation" ] || [ "$ZONE" = "FedoraServer" ] || [ "$ZONE" = "trusted" ]; then
+    sudo firewall-cmd --set-default-zone=public >/dev/null 2>&1; log "[ok] Firewall zone $ZONE -> public"
+  else log "[ok] Kept your firewall zone: $ZONE"; fi
+  [ $SSH_ON = 0 ] && [ "$(sudo firewall-cmd --get-default-zone 2>/dev/null)" = public ] && sudo firewall-cmd --permanent --zone=public --remove-service=ssh >/dev/null 2>&1
   sudo firewall-cmd --reload >/dev/null 2>&1 && log "[ok] firewalld on (zone: public)"
   if [ -f /etc/dnf/automatic.conf ]; then
     sudo sed -i 's/^apply_updates.*/apply_updates = yes/; s/^upgrade_type.*/upgrade_type = security/' /etc/dnf/automatic.conf
