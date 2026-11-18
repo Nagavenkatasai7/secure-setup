@@ -72,18 +72,20 @@ if ($smb1 -eq 'Enabled') { Disable-WindowsOptionalFeature -Online -FeatureName S
 else { Log "[ok] SMBv1 already off" }
 $sys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
 Set-ItemProperty $sys -Name EnableLUA -Value 1 -Type DWord
-Set-ItemProperty $sys -Name ConsentPromptBehaviorAdmin -Value 5 -Type DWord
-Log "[ok] UAC on"
+$cpba = (Get-ItemProperty $sys -ErrorAction SilentlyContinue).ConsentPromptBehaviorAdmin
+if ($null -eq $cpba -or $cpba -eq 0) { Set-ItemProperty $sys -Name ConsentPromptBehaviorAdmin -Value 5 -Type DWord; Log "[ok] UAC on (default prompt level)" }
+else { Log "[ok] UAC on (kept your existing prompt level $cpba)" }
 $exp = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
-New-Item $exp -Force | Out-Null
+if (-not (Test-Path $exp)) { New-Item $exp -Force | Out-Null }
 Set-ItemProperty $exp -Name NoDriveTypeAutoRun -Value 255 -Type DWord
 Set-ItemProperty $exp -Name NoAutorun -Value 1 -Type DWord
 Log "[ok] AutoRun off"
 $dc = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection'
-New-Item $dc -Force | Out-Null
-Set-ItemProperty $dc -Name AllowTelemetry -Value 1 -Type DWord
+if (-not (Test-Path $dc)) { New-Item $dc -Force | Out-Null }
+$tel = (Get-ItemProperty $dc -ErrorAction SilentlyContinue).AllowTelemetry
+if ($null -eq $tel -or $tel -gt 1) { Set-ItemProperty $dc -Name AllowTelemetry -Value 1 -Type DWord }
 $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo'
-New-Item $adv -Force | Out-Null
+if (-not (Test-Path $adv)) { New-Item $adv -Force | Out-Null }
 Set-ItemProperty $adv -Name Enabled -Value 0 -Type DWord
 Log "[ok] Telemetry lowered, advertising ID off"
 
@@ -93,7 +95,10 @@ if ($rdpOn -and (Ask "Remote Desktop is ON. Turn it off? (say No if you connect 
   Log "[ok] Remote Desktop off"
 }
 
-if ($blOK -and $bl.ProtectionStatus -ne 'On') {
+if ($blOK -and $bl.VolumeStatus -ne 'FullyDecrypted' -and $bl.ProtectionStatus -ne 'On') {
+  Log "[note] BitLocker is set up but suspended or still encrypting ($($bl.VolumeStatus)). Not adding another key. If suspended, run: Resume-BitLocker -MountPoint $($env:SystemDrive)"
+}
+if ($blOK -and $bl.VolumeStatus -eq 'FullyDecrypted') {
   Write-Host ""
   Write-Host "BitLocker encrypts the system drive. It creates a RECOVERY KEY (48 digits)."
   Write-Host "Save it in your password manager or Microsoft account. Without it you can lose your data."
